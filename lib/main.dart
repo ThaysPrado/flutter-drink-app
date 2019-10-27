@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:bloc/bloc.dart';
 import 'package:http/http.dart';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:page_transition/page_transition.dart';
 
 void main() {
   runApp(MyApp());
@@ -14,11 +15,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Some App',
       home: DrinkApp(),
-      routes: <String, WidgetBuilder> {
-        '/screen1': (BuildContext context) => new DrinkApp(),
-        '/screen2': (BuildContext context) => new ListDrinks(),
-        '/randomDrink': (BuildContext context) => new DrinkRandom(),
-      }
     );
   }
 }
@@ -28,14 +24,14 @@ class DrinkApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = 'Drinks';
 
-    //final typesArr = ['Alcoholic', 'Non_Alcoholic', 'Ordinary_Drink', 'Cocktail', 'Random'];
-
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
       ),
       body: GridView.count(
         crossAxisCount: 2,
+        shrinkWrap: true,
+        primary: false,
         children: <Map<String,dynamic>>[
         {
           'title':'Alcoholic',
@@ -59,24 +55,43 @@ class DrinkApp extends StatelessWidget {
         },
         {
           'title':'Random',
-          'image': 'assets/placeholder.jpg'
+          'image': 'assets/random.jpg'
         },
       ].map((Map<String,dynamic> item) {
         return Center(
           child: GestureDetector(
             onTap: () {
               if (item['title'] == 'Random') {
-                Navigator.of(context).pushNamed('/randomDrink');
+                Navigator.push(
+                  context,
+                  PageTransition(type: PageTransitionType.rightToLeft, child: DrinkRandom()),
+                );
               } else {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => ListDrinks(search: item['search'], title: item['title']),
-                  ),
+                  PageTransition(type: PageTransitionType.rightToLeft, child: ListDrinks(search: item['search'], title: item['title'])),
                 );
               }
             },
-            child: Text(item['title'], style: Theme.of(context).textTheme.headline,),
+            child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+                Card(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(10.0))),
+                  child: Image.asset(item['image'],
+                    height: 120,
+                    width: 120
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                ),
+                Text(item['title'],  style: new TextStyle(
+                  fontSize: 16.0,
+                  color: Colors.black,
+                ),),
+              ],
+            ),
           ),
         );
       }).toList()
@@ -152,12 +167,13 @@ class _ListDrinksState extends State<ListDrinks> {
                   ),
                   title: Text(drink.strDrink),
                   onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DrinkDetails(id: drink.idDrink, drinkName: drink.strDrink,),
-                    ),
-                  );
+                    Navigator.push(
+                      context,
+                      PageTransition(
+                        type: PageTransitionType.rightToLeft,
+                        child:DrinkDetails(id: drink.idDrink, drinkName: drink.strDrink,),
+                      ),
+                    );
                 },
                 ))
             .toList(),
@@ -279,7 +295,9 @@ class _DrinkRandomState extends State<DrinkRandom> {
   String imgUrl = '';
   String instructions = '';
 
-  Future getDrinkDetails() async {
+  RefreshController _refreshController = RefreshController(initialRefresh: false);
+
+  Future<void> _getDrinkDetails() async {
 
     String url = 'https://www.thecocktaildb.com/api/json/v1/1/random.php';
 
@@ -296,12 +314,19 @@ class _DrinkRandomState extends State<DrinkRandom> {
     } else {
       throw Exception('Failed to load internet');
     }
+    return;
+  }
+
+  void _onRefresh() async {
+    await Future.delayed(Duration(milliseconds: 1000));
+    _getDrinkDetails();
+    _refreshController.refreshCompleted();
   }
 
   @override
   void initState() {
     super.initState();
-    getDrinkDetails();
+    _getDrinkDetails();
   }
 
   @override
@@ -310,7 +335,11 @@ class _DrinkRandomState extends State<DrinkRandom> {
       appBar: AppBar(
         title: Text(title),
       ),
-      body: new Column(
+      body: new SmartRefresher(
+        enablePullDown: true,
+        enablePullUp: false,
+        header: MaterialClassicHeader(),
+        child: new Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
@@ -343,6 +372,9 @@ class _DrinkRandomState extends State<DrinkRandom> {
             flex: 4,
           ),
         ],
+      ),
+      controller: _refreshController,
+      onRefresh: _onRefresh,
       ),
     );
   }
